@@ -1,0 +1,125 @@
+services:
+  # Control Center - Master node for reference data
+  pg-center:
+    image: postgres:16
+    container_name: pg-center
+    environment:
+      POSTGRES_DB: marine_db
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+    ports:
+      - "5432:5432"
+    command: [
+      "postgres",
+      "-c","wal_level=logical",
+      "-c","max_wal_senders=10",
+      "-c","max_replication_slots=10",
+      "-c","listen_addresses=*"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U app -d marine_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - center-data:/var/lib/postgresql/data
+      - ./distributed/sql:/sql:ro
+
+  # Port Node - For port operations and planning
+  pg-ports:
+    image: postgres:16
+    container_name: pg-ports
+    environment:
+      POSTGRES_DB: marine_db
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+    ports:
+      - "5433:5432"
+    depends_on:
+      pg-center:
+        condition: service_healthy
+    command: [
+      "postgres",
+      "-c","wal_level=logical",
+      "-c","max_wal_senders=10",
+      "-c","max_replication_slots=10",
+      "-c","listen_addresses=*"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U app -d marine_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - ports-data:/var/lib/postgresql/data
+      - ./distributed/sql:/sql:ro
+
+  # Ship Node - For measurement collection (offline capable)
+  pg-ships:
+    image: postgres:16
+    container_name: pg-ships
+    environment:
+      POSTGRES_DB: marine_db
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+    ports:
+      - "5434:5432"
+    depends_on:
+      pg-center:
+        condition: service_healthy
+      pg-ports:
+        condition: service_healthy
+    command: [
+      "postgres",
+      "-c","wal_level=logical",
+      "-c","max_wal_senders=10",
+      "-c","max_replication_slots=10",
+      "-c","listen_addresses=*"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U app -d marine_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - ships-data:/var/lib/postgresql/data
+      - ./distributed/sql:/sql:ro
+
+  # Solver Node - For data consolidation and analytics
+  pg-solver:
+    image: postgres:16
+    container_name: pg-solver
+    environment:
+      POSTGRES_DB: marine_db
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+    ports:
+      - "5435:5432"
+    depends_on:
+      pg-center:
+        condition: service_healthy
+      pg-ports:
+        condition: service_healthy
+      pg-ships:
+        condition: service_healthy
+    command: [
+      "postgres",
+      "-c","wal_level=logical",
+      "-c","max_wal_senders=10",
+      "-c","max_replication_slots=10",
+      "-c","listen_addresses=*"
+    ]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U app -d marine_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - solver-data:/var/lib/postgresql/data
+      - ./distributed/sql:/sql:ro
+
+volumes:
+  center-data:
+  ports-data:
+  ships-data:
+  solver-data:
